@@ -1,10 +1,11 @@
 # fatherpaul-code
 
-CLI npm pour utiliser Father Paul Assistant en mode developpeur:
-- chat code
-- edition de fichiers assistee IA
-- execution terminal controlee
-- endpoint OpenAI-compatible (`/v1`)
+CLI npm officiel de Father Paul Assistant pour les workflows dev:
+
+- chat code (OpenAI-compatible API)
+- edition assistee de fichiers avec diff preview
+- execution terminal controlee (garde-fous integres)
+- login utilisateur (email/mot de passe) avec session locale
 
 ## Installation
 
@@ -12,93 +13,114 @@ CLI npm pour utiliser Father Paul Assistant en mode developpeur:
 npm i -g fatherpaul-code
 ```
 
-## Configuration initiale
+Verifier l'installation:
+
+```bash
+fatherpaul-code --help
+```
+
+## Demarrage rapide (2 minutes)
+
+1. Initialiser la CLI:
 
 ```bash
 fatherpaul-code init
 ```
 
-Valeurs conseillees:
-- API Base: `https://ai-api-dev.79.137.32.27.nip.io/v1`
-- API Key: `sk-...` (cle client)
-- Modele: `qwen2.5-7b`
-
-Afficher la config:
-
-```bash
-fatherpaul-code config
-```
-
-## Authentification utilisateur (mode Claude/Codex)
-
-Connexion avec compte utilisateur portail (recupere automatiquement la cle API de l utilisateur):
+2. Se connecter avec un compte utilisateur:
 
 ```bash
 fatherpaul-code login
 ```
 
-Puis verifier la session:
+3. Verifier la session:
 
 ```bash
 fatherpaul-code whoami
 ```
 
-Fermer la session locale:
+4. Poser une premiere question:
 
 ```bash
-fatherpaul-code logout
+fatherpaul-code chat "Cree une fonction Node.js pour lire un fichier JSON avec gestion d'erreur"
 ```
 
-Pre-requis backend:
+## Modes d'authentification
 
-- endpoint `POST /api/auth/login`
-- endpoint `GET /api/me`
-- endpoint `GET /api/subscription/status`
-- endpoint `GET /api/cli/session` (retourne `api_key` et `api_base_url` pour la session CLI)
+Mode recommande: `login` (type Claude/Codex)
+
+- le user s'authentifie via email/mot de passe
+- la CLI recupere automatiquement `api_key` et `api_base_url`
+- la cle est stockee localement pour les commandes suivantes
+
+Mode alternatif: API key directe
+
+- utile pour integration serveur/service account
+- configuration manuelle via `fatherpaul-code init --api-key sk-...`
+
+## Pre-requis backend pour le mode `login`
+
+- `POST /api/auth/login`
+- `GET /api/me`
+- `GET /api/subscription/status`
+- `GET /api/cli/session` (retourne `api_key` et `api_base_url`)
 
 ## Commandes principales
 
-### Lister les modeles
+### Session
+
+```bash
+fatherpaul-code login
+fatherpaul-code whoami
+fatherpaul-code logout
+fatherpaul-code config
+```
+
+### Modeles
 
 ```bash
 fatherpaul-code models
 ```
 
-### Chat (one-shot)
+### Chat
+
+Mode one-shot:
 
 ```bash
-fatherpaul-code chat "Ecris une fonction TypeScript debounce"
+fatherpaul-code chat "Explique ce bug Java Spring: BeanCurrentlyInCreationException"
 ```
 
-### Chat interactif
+Mode interactif:
 
 ```bash
 fatherpaul-code chat
 ```
 
-Tape `/exit` pour quitter.
+Quitter avec `/exit`.
 
-### Editer un fichier avec preview diff
+### Edition de fichiers
 
 ```bash
-fatherpaul-code edit src/app.ts "Ajoute gestion d erreurs et logs"
+fatherpaul-code edit src/app.ts "Refactorise avec gestion d'erreurs et logs structures"
 ```
 
 Options utiles:
+
 - `--yes`: applique sans confirmation
-- `--no-backup`: desactive la sauvegarde `.bak`
+- `--no-backup`: desactive le backup `.bak`
 - `-m, --model`: force un modele
 
-### Executer une commande shell controlee
+### Commandes shell controlees
 
 ```bash
 fatherpaul-code run "npm test"
 ```
 
-Garde-fous inclus:
-- blocage de motifs dangereux (`rm -rf /`, `curl|sh`, etc.)
-- allowlist de commandes autorisees
-- confirmation pour commandes non lecture seule
+Garde-fous:
+
+- blocage de patterns dangereux (`rm -rf /`, `curl|sh`, etc.)
+- allowlist des commandes autorisees
+- confirmation sur commandes non lecture-seule
 
 ### Diagnostic
 
@@ -106,9 +128,47 @@ Garde-fous inclus:
 fatherpaul-code doctor
 ```
 
-## Packaging npm
+## Fichier de configuration
 
-Tester en local:
+Chemin:
+
+- `~/.config/fatherpaul-code/config.json`
+
+Exemple:
+
+```json
+{
+  "apiBase": "https://ai-api-dev.79.137.32.27.nip.io/v1",
+  "portalBase": "https://ai-portal-dev.79.137.32.27.nip.io",
+  "apiKey": "sk-xxxx",
+  "accessToken": "jwt-xxxx",
+  "authMode": "session",
+  "userEmail": "user@example.com",
+  "defaultModel": "qwen2.5-7b",
+  "maxTokens": 512,
+  "timeoutMs": 90000,
+  "allowCommands": ["ls", "pwd", "cat", "git", "npm", "node"]
+}
+```
+
+## Erreurs frequentes
+
+`Abonnement non actif`
+
+- activer une offre cote portail avant `fatherpaul-code login`
+
+`key not allowed to access model`
+
+- le modele choisi n'est pas autorise pour ce forfait
+- faire `fatherpaul-code models` puis utiliser un modele autorise
+
+`Cle API introuvable via session CLI`
+
+- verifier que le backend expose bien `GET /api/cli/session`
+
+## Publication npm (maintainers)
+
+Tester localement:
 
 ```bash
 npm link
@@ -122,7 +182,12 @@ npm login
 npm publish --access public
 ```
 
-## Notes
+## Documentation complete
 
-- Config stockee dans: `~/.config/fatherpaul-code/config.json`
-- Compatible Node.js `>=20`
+Reference detaillee:
+
+- `docs/CLI_REFERENCE.md`
+
+## Compatibilite
+
+- Node.js `>=20`
