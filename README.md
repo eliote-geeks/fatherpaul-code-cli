@@ -29,6 +29,33 @@ Afficher la config:
 fatherpaul-code config
 ```
 
+## Authentification utilisateur (mode Claude/Codex)
+
+Connexion avec compte utilisateur portail (recupere automatiquement la cle API de l utilisateur):
+
+```bash
+fatherpaul-code login
+```
+
+Puis verifier la session:
+
+```bash
+fatherpaul-code whoami
+```
+
+Fermer la session locale:
+
+```bash
+fatherpaul-code logout
+```
+
+Pre-requis backend:
+
+- endpoint `POST /api/auth/login`
+- endpoint `GET /api/me`
+- endpoint `GET /api/subscription/status`
+- endpoint `GET /api/cli/session` (retourne `api_key` et `api_base_url` pour la session CLI)
+
 ## Commandes principales
 
 ### Lister les modeles

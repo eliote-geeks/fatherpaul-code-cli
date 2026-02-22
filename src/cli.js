@@ -16,7 +16,11 @@ const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
 const DEFAULT_CONFIG = {
   apiBase: 'https://ai-api-dev.79.137.32.27.nip.io/v1',
+  portalBase: 'https://ai-portal-dev.79.137.32.27.nip.io',
   apiKey: '',
+  accessToken: '',
+  authMode: 'apikey',
+  userEmail: '',
   defaultModel: 'qwen2.5-7b',
   maxTokens: 512,
   timeoutMs: 90000,
@@ -47,6 +51,24 @@ function normalizeApiBase(value) {
   return (value || '').trim().replace(/\/+$/, '');
 }
 
+function derivePortalBase(apiBase) {
+  const normalized = normalizeApiBase(apiBase);
+  if (!normalized) return DEFAULT_CONFIG.portalBase;
+  if (normalized.includes('ai-api-dev.')) {
+    return normalized.replace('ai-api-dev.', 'ai-portal-dev.').replace(/\/v1$/, '');
+  }
+  if (normalized.endsWith('/v1')) {
+    return normalized.slice(0, -3);
+  }
+  return normalized;
+}
+
+function normalizePortalBase(value, apiBaseFallback = DEFAULT_CONFIG.apiBase) {
+  const candidate = (value || '').trim().replace(/\/+$/, '');
+  if (candidate) return candidate;
+  return derivePortalBase(apiBaseFallback);
+}
+
 async function ensureConfigDir() {
   await fs.mkdir(CONFIG_DIR, { recursive: true });
 }
@@ -59,6 +81,7 @@ async function loadConfig() {
       ...DEFAULT_CONFIG,
       ...parsed,
       apiBase: normalizeApiBase(parsed.apiBase || DEFAULT_CONFIG.apiBase),
+      portalBase: normalizePortalBase(parsed.portalBase, parsed.apiBase || DEFAULT_CONFIG.apiBase),
       allowCommands: Array.isArray(parsed.allowCommands)
         ? parsed.allowCommands
         : DEFAULT_CONFIG.allowCommands,
@@ -74,6 +97,7 @@ async function saveConfig(config) {
     ...DEFAULT_CONFIG,
     ...config,
     apiBase: normalizeApiBase(config.apiBase || DEFAULT_CONFIG.apiBase),
+    portalBase: normalizePortalBase(config.portalBase, config.apiBase || DEFAULT_CONFIG.apiBase),
   };
   await fs.writeFile(CONFIG_FILE, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
 }
@@ -181,27 +205,23 @@ async function askConfirm(message, initial = false) {
   return Boolean(ok);
 }
 
-async function apiRequest(config, endpoint, payload, method = 'POST') {
-  const apiBase = normalizeApiBase(config.apiBase);
-  if (!apiBase) {
-    throw new Error('API base manquante. Lance: fatherpaul-code init');
+async function jsonRequest({ baseUrl, endpoint, method = 'POST', payload, headers = {}, timeoutMs = 90000 }) {
+  const normalizedBase = (baseUrl || '').trim().replace(/\/+$/, '');
+  if (!normalizedBase) {
+    throw new Error('Base URL manquante.');
   }
-  if (!config.apiKey) {
-    throw new Error('API key manquante. Lance: fatherpaul-code init');
-  }
-
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), Number(config.timeoutMs) || 90000);
-
-  const url = `${apiBase}/${endpoint.replace(/^\/+/, '')}`;
+  const timeoutId = setTimeout(() => controller.abort(), Number(timeoutMs) || 90000);
+  const url = `${normalizedBase}/${endpoint.replace(/^\/+/, '')}`;
 
   try {
+    const finalHeaders = {
+      ...(payload ? { 'Content-Type': 'application/json' } : {}),
+      ...headers,
+    };
     const response = await fetch(url, {
       method,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${config.apiKey}`,
-      },
+      headers: finalHeaders,
       body: payload ? JSON.stringify(payload) : undefined,
       signal: controller.signal,
     });
@@ -216,6 +236,72 @@ async function apiRequest(config, endpoint, payload, method = 'POST') {
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+async function apiRequest(config, endpoint, payload, method = 'POST') {
+  const apiBase = normalizeApiBase(config.apiBase);
+  if (!apiBase) {
+    throw new Error('API base manquante. Lance: fatherpaul-code init');
+  }
+  if (!config.apiKey) {
+    throw new Error('API key manquante. Lance: fatherpaul-code init ou fatherpaul-code login');
+  }
+
+  return jsonRequest({
+    baseUrl: apiBase,
+    endpoint,
+    method,
+    payload,
+    timeoutMs: config.timeoutMs,
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+    },
+  });
+}
+
+async function portalRequest(config, endpoint, payload, method = 'GET', tokenOverride = '') {
+  const portalBase = normalizePortalBase(config.portalBase, config.apiBase);
+  const token = tokenOverride || config.accessToken || '';
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+  return jsonRequest({
+    baseUrl: portalBase,
+    endpoint,
+    method,
+    payload,
+    timeoutMs: config.timeoutMs,
+    headers,
+  });
+}
+
+async function portalHtmlRequest(config, endpoint, tokenOverride = '') {
+  const portalBase = normalizePortalBase(config.portalBase, config.apiBase);
+  const token = tokenOverride || config.accessToken || '';
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), Number(config.timeoutMs) || 90000);
+  const url = `${portalBase}/${endpoint.replace(/^\/+/, '')}`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Portal ${response.status}: ${text}`);
+    }
+    return response.text();
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function extractApiKeyFromDashboard(html) {
+  const scoped = html.match(/<details>[\s\S]*?<code>(sk-[^<\s]+)<\/code>[\s\S]*?<\/details>/i);
+  if (scoped?.[1]) return scoped[1];
+  const generic = html.match(/<code>(sk-[^<\s]+)<\/code>/i);
+  return generic?.[1] || '';
 }
 
 async function chatOnce(config, userPrompt, options = {}) {
@@ -310,8 +396,9 @@ program
 
 program
   .command('init')
-  .description('Configurer endpoint API, cle et modele par defaut')
+  .description('Configurer endpoint API/portal, cle et modele par defaut')
   .option('--api-base <url>', 'API base URL, ex: https://ai-api-dev.../v1')
+  .option('--portal-base <url>', 'Portal base URL, ex: https://ai-portal-dev...')
   .option('--api-key <key>', 'Cle API client')
   .option('--model <model>', 'Modele par defaut, ex: qwen2.5-7b')
   .action(async (opts) => {
@@ -321,14 +408,22 @@ program
       opts.apiBase || (await askInput('API Base URL', current.apiBase || DEFAULT_CONFIG.apiBase))
     );
 
-    const apiKey = opts.apiKey || (await askPassword('API Key (sk-...)')) || current.apiKey;
+    const portalBase = normalizePortalBase(
+      opts.portalBase || (await askInput('Portal Base URL', current.portalBase || derivePortalBase(apiBase))),
+      apiBase
+    );
+
+    const inputApiKey = opts.apiKey ?? (await askPassword('API Key (sk-...) [optionnel si login]'));
+    const apiKey = inputApiKey || current.apiKey;
 
     const defaultModel = opts.model || (await askInput('Modele par defaut', current.defaultModel));
 
     const next = {
       ...current,
       apiBase,
+      portalBase,
       apiKey,
+      authMode: apiKey ? current.authMode || 'apikey' : current.authMode,
       defaultModel,
     };
 
@@ -337,8 +432,137 @@ program
     console.log(chalk.green('Configuration enregistree.'));
     console.log(`- Fichier: ${CONFIG_FILE}`);
     console.log(`- API Base: ${next.apiBase}`);
+    console.log(`- Portal Base: ${next.portalBase}`);
     console.log(`- API Key: ${maskApiKey(next.apiKey)}`);
     console.log(`- Modele: ${next.defaultModel}`);
+  });
+
+program
+  .command('login')
+  .description('Authentifier un utilisateur portail et recuperer sa cle API')
+  .option('-e, --email <email>', 'Email utilisateur')
+  .option('-p, --password <password>', 'Mot de passe utilisateur')
+  .option('--portal-base <url>', 'Portal base URL')
+  .action(async (opts) => {
+    const current = await loadConfig();
+    const portalBase = normalizePortalBase(opts.portalBase || current.portalBase, current.apiBase);
+    const email = (opts.email || (await askInput('Email')) || '').toLowerCase();
+    const password = opts.password || (await askPassword('Mot de passe'));
+
+    if (!email || !password) {
+      throw new Error('Email/mot de passe requis.');
+    }
+
+    console.log(chalk.cyan('Connexion au portail...'));
+    const auth = await portalRequest(
+      { ...current, portalBase },
+      '/api/auth/login',
+      { email, password },
+      'POST'
+    );
+    const accessToken = auth?.access_token;
+    if (!accessToken) {
+      throw new Error('Token non retourne par /api/auth/login');
+    }
+
+    const me = await portalRequest(
+      { ...current, portalBase, accessToken },
+      '/api/me',
+      null,
+      'GET',
+      accessToken
+    );
+    const sub = await portalRequest(
+      { ...current, portalBase, accessToken },
+      '/api/subscription/status',
+      null,
+      'GET',
+      accessToken
+    );
+
+    if (sub?.status !== 'ACTIVE') {
+      throw new Error('Abonnement non actif. Active une formule avant usage CLI.');
+    }
+
+    let apiKey = '';
+    let apiBaseFromPortal = '';
+    try {
+      const cliSession = await portalRequest(
+        { ...current, portalBase, accessToken },
+        '/api/cli/session',
+        null,
+        'GET',
+        accessToken
+      );
+      apiKey = cliSession?.api_key || '';
+      apiBaseFromPortal = normalizeApiBase(cliSession?.api_base_url || '');
+    } catch {
+      // Backward compatibility: old backend without /api/cli/session.
+      const html = await portalHtmlRequest(
+        { ...current, portalBase, accessToken },
+        '/dashboard',
+        accessToken
+      );
+      apiKey = extractApiKeyFromDashboard(html);
+    }
+
+    if (!apiKey) {
+      throw new Error('Cle API introuvable via session CLI. Verifie abonnement ou backend /api/cli/session.');
+    }
+
+    const next = {
+      ...current,
+      portalBase,
+      apiBase: apiBaseFromPortal || current.apiBase,
+      apiKey,
+      accessToken,
+      authMode: 'session',
+      userEmail: me?.email || email,
+    };
+    await saveConfig(next);
+
+    console.log(chalk.green('Connexion CLI reussie.'));
+    console.log(`- User: ${next.userEmail || email}`);
+    console.log(`- Plan: ${sub?.plan || 'UNKNOWN'}`);
+    console.log(`- API Key: ${maskApiKey(next.apiKey)}`);
+    if (sub?.end_at) {
+      console.log(`- Expire le: ${sub.end_at}`);
+    }
+  });
+
+program
+  .command('whoami')
+  .description('Afficher l utilisateur connecte et son abonnement')
+  .action(async () => {
+    const config = await loadConfig();
+    if (!config.accessToken) {
+      console.log(chalk.yellow('Aucune session login active. Utilise: fatherpaul-code login'));
+      return;
+    }
+    const me = await portalRequest(config, '/api/me', null, 'GET');
+    const sub = await portalRequest(config, '/api/subscription/status', null, 'GET');
+    console.log(chalk.cyan('Session CLI'));
+    console.log(`- Email: ${me?.email || config.userEmail || '(inconnu)'}`);
+    console.log(`- Subscription: ${sub?.status || 'UNKNOWN'}`);
+    console.log(`- Plan: ${sub?.plan || '(none)'}`);
+    console.log(`- API Key: ${maskApiKey(config.apiKey)}`);
+  });
+
+program
+  .command('logout')
+  .description('Supprimer la session locale CLI')
+  .action(async () => {
+    const current = await loadConfig();
+    const next = {
+      ...current,
+      accessToken: '',
+      apiKey: '',
+      authMode: 'apikey',
+      userEmail: '',
+    };
+    await saveConfig(next);
+    console.log(chalk.green('Session locale supprimee.'));
+    console.log('Relance fatherpaul-code login pour reutiliser la CLI.');
   });
 
 program
@@ -349,6 +573,9 @@ program
     console.log(chalk.cyan('Configuration fatherpaul-code'));
     console.log(`- Fichier: ${CONFIG_FILE}`);
     console.log(`- API Base: ${config.apiBase}`);
+    console.log(`- Portal Base: ${config.portalBase}`);
+    console.log(`- Mode auth: ${config.authMode || 'apikey'}`);
+    console.log(`- User: ${config.userEmail || '(non connecte)'}`);
     console.log(`- API Key: ${maskApiKey(config.apiKey)}`);
     console.log(`- Modele par defaut: ${config.defaultModel}`);
     console.log(`- Max tokens: ${config.maxTokens}`);
@@ -534,6 +761,8 @@ program
     const config = await loadConfig();
     console.log(chalk.cyan('Verification de la configuration...'));
     console.log(`- API Base: ${config.apiBase}`);
+    console.log(`- Portal Base: ${config.portalBase}`);
+    console.log(`- Mode auth: ${config.authMode || 'apikey'}`);
     console.log(`- API Key: ${maskApiKey(config.apiKey)}`);
     console.log(`- Modele: ${config.defaultModel}`);
 
@@ -556,10 +785,13 @@ program
   .action(() => {
     console.log(`
 + fatherpaul-code init
++ fatherpaul-code login
++ fatherpaul-code whoami
 + fatherpaul-code models
 + fatherpaul-code chat "Ecris une fonction JS debounce"
 + fatherpaul-code edit src/app.js "Ajoute gestion d erreurs"
 + fatherpaul-code run "npm test"
++ fatherpaul-code logout
 `);
   });
 
