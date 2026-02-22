@@ -2,7 +2,15 @@
   "name": "fatherpaul-code",
   "version": "0.1.0",
   "description": "Father Paul Assistant CLI for code workflows",
+  "homepage": "https://ai-portal-dev.79.137.32.27.nip.io/",
   "main": "src/cli.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eliote-geeks/fatherpaul-code-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/eliote-geeks/fatherpaul-code-cli/issues"
+  },
   "scripts": {
     "test": "node --test",
     "lint": "node -e \"console.log(\\\"No lint configured\\\")\""
