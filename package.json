@@ -1,0 +1,36 @@
+{
+  "name": "fatherpaul-code",
+  "version": "0.1.0",
+  "description": "Father Paul Assistant CLI for code workflows",
+  "main": "src/cli.js",
+  "scripts": {
+    "test": "node --test",
+    "lint": "node -e \"console.log(\\\"No lint configured\\\")\""
+  },
+  "keywords": [
+    "ai",
+    "cli",
+    "openai-compatible",
+    "fatherpaul"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "fatherpaul-code": "./src/cli.js"
+  },
+  "dependencies": {
+    "chalk": "^5.4.1",
+    "commander": "^14.0.1",
+    "enquirer": "^2.4.1"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "preferGlobal": true,
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ]
+}
