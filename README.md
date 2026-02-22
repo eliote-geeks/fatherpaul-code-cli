@@ -133,12 +133,3 @@ Si un client n'a pas encore de compte actif, passer par WhatsApp support:
 
 - verifier la session (`fatherpaul-code whoami`)
 - relancer `fatherpaul-code login`
-
-## Maintainers
-
-Publication npm:
-
-```bash
-npm login
-npm publish --access public
-```
