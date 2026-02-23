@@ -108,6 +108,27 @@ function maskApiKey(apiKey) {
   return `${apiKey.slice(0, 6)}...${apiKey.slice(-4)}`;
 }
 
+function isApiError(error, statusCode, detailText = '') {
+  const message = String(error?.message || '');
+  const statusMatch = message.includes(`API ${statusCode}:`);
+  if (!statusMatch) return false;
+  if (!detailText) return true;
+  return message.toLowerCase().includes(detailText.toLowerCase());
+}
+
+function deriveFullNameFromEmail(email) {
+  const localPart = String(email || '').split('@')[0] || 'User';
+  const cleaned = localPart
+    .replace(/[._-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return 'User';
+  return cleaned
+    .split(' ')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
 function parseAssistantText(data) {
   const content = data?.choices?.[0]?.message?.content;
   if (typeof content === 'string') return content;
@@ -438,15 +459,52 @@ program
   });
 
 program
+  .command('register')
+  .description('Creer un compte portail (si vous avez seulement un compte OpenWebUI)')
+  .option('-e, --email <email>', 'Email utilisateur')
+  .option('-p, --password <password>', 'Mot de passe utilisateur')
+  .option('-n, --full-name <name>', 'Nom complet utilisateur')
+  .option('--portal-base <url>', 'Portal base URL')
+  .action(async (opts) => {
+    const current = await loadConfig();
+    const portalBase = normalizePortalBase(opts.portalBase || current.portalBase, current.apiBase);
+    const email = String(opts.email || (await askInput('Email')) || '').trim().toLowerCase();
+    const password = opts.password || (await askPassword('Mot de passe'));
+    const fullName = String(
+      opts.fullName || opts.full_name || (await askInput('Nom complet', deriveFullNameFromEmail(email)))
+    )
+      .trim();
+
+    if (!email || !password || !fullName) {
+      throw new Error('Email/mot de passe/nom complet requis.');
+    }
+    if (password.length < 8) {
+      throw new Error('Mot de passe trop court (min 8 caracteres).');
+    }
+
+    console.log(chalk.cyan('Creation du compte portail...'));
+    await portalRequest(
+      { ...current, portalBase },
+      '/api/auth/signup',
+      { email, password, full_name: fullName },
+      'POST'
+    );
+
+    console.log(chalk.green('Compte portail cree.'));
+    console.log(chalk.gray('Etape suivante: fatherpaul-code login'));
+  });
+
+program
   .command('login')
   .description('Authentifier un utilisateur portail et recuperer sa cle API')
   .option('-e, --email <email>', 'Email utilisateur')
   .option('-p, --password <password>', 'Mot de passe utilisateur')
   .option('--portal-base <url>', 'Portal base URL')
+  .option('--auto-signup', 'Creer automatiquement le compte portail si absent')
   .action(async (opts) => {
     const current = await loadConfig();
     const portalBase = normalizePortalBase(opts.portalBase || current.portalBase, current.apiBase);
-    const email = (opts.email || (await askInput('Email')) || '').toLowerCase();
+    const email = String(opts.email || (await askInput('Email')) || '').trim().toLowerCase();
     const password = opts.password || (await askPassword('Mot de passe'));
 
     if (!email || !password) {
@@ -454,12 +512,44 @@ program
     }
 
     console.log(chalk.cyan('Connexion au portail...'));
-    const auth = await portalRequest(
-      { ...current, portalBase },
-      '/api/auth/login',
-      { email, password },
-      'POST'
-    );
+    let auth;
+    try {
+      auth = await portalRequest(
+        { ...current, portalBase },
+        '/api/auth/login',
+        { email, password },
+        'POST'
+      );
+    } catch (error) {
+      if (opts.autoSignup && isApiError(error, 401, 'Invalid credentials')) {
+        const fullName = deriveFullNameFromEmail(email);
+        console.log(chalk.yellow('Compte introuvable sur le portal, creation automatique...'));
+        await portalRequest(
+          { ...current, portalBase },
+          '/api/auth/signup',
+          { email, password, full_name: fullName },
+          'POST'
+        );
+        auth = await portalRequest(
+          { ...current, portalBase },
+          '/api/auth/login',
+          { email, password },
+          'POST'
+        );
+      } else if (isApiError(error, 401, 'Invalid credentials')) {
+        throw new Error(
+          [
+            'Identifiants invalides sur le portal.',
+            'Si vous avez cree le compte seulement sur OpenWebUI, creez aussi le compte portal:',
+            '- fatherpaul-code register',
+            'ou',
+            '- fatherpaul-code login --auto-signup',
+          ].join('\n')
+        );
+      } else {
+        throw error;
+      }
+    }
     const accessToken = auth?.access_token;
     if (!accessToken) {
       throw new Error('Token non retourne par /api/auth/login');

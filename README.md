@@ -63,6 +63,14 @@ fatherpaul-code login
 fatherpaul-code whoami
 ```
 
+Si votre compte existe sur OpenWebUI mais pas encore sur le portal API, creez-le une fois:
+
+```bash
+fatherpaul-code register
+# ou creation auto au login
+fatherpaul-code login --auto-signup
+```
+
 Ensuite, la CLI recupere automatiquement:
 
 - la cle API du compte
@@ -133,3 +141,9 @@ Si un client n'a pas encore de compte actif, passer par WhatsApp support:
 
 - verifier la session (`fatherpaul-code whoami`)
 - relancer `fatherpaul-code login`
+
+`Invalid credentials` alors que le login web fonctionne
+
+- verifier que le compte existe aussi sur le portal API
+- lancer `fatherpaul-code register`
+- ou utiliser `fatherpaul-code login --auto-signup`

@@ -34,6 +34,20 @@ Authentification utilisateur portail (email/mot de passe), puis recuperation aut
 fatherpaul-code login
 fatherpaul-code login --email user@example.com --password "Secret123!"
 fatherpaul-code login --portal-base https://ai-portal-dev.79.137.32.27.nip.io
+fatherpaul-code login --auto-signup
+```
+
+Option utile:
+
+- `--auto-signup`: cree automatiquement le compte portail si absent, puis relance le login.
+
+## `register`
+
+Creer explicitement un compte portail API (utile si vous avez seulement un compte OpenWebUI).
+
+```bash
+fatherpaul-code register
+fatherpaul-code register --email user@example.com --password "Secret123!" --full-name "User Name"
 ```
 
 ## `whoami`
@@ -162,6 +176,12 @@ fatherpaul-code help-quick
 `409 API key is not provisioned`
 
 - abonnement present mais cle non creee cote backend
+
+`401 Invalid credentials`
+
+- compte/mot de passe incorrect sur le portal API
+- si le compte existe seulement sur OpenWebUI, faire `fatherpaul-code register`
+- ou utiliser `fatherpaul-code login --auto-signup`
 
 ## Bonnes pratiques
 
