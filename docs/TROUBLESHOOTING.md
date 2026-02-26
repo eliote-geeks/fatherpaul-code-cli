@@ -145,6 +145,7 @@ fatherpaul-code config
 fatherpaul-code whoami
 fatherpaul-code models
 fatherpaul-code doctor
+fatherpaul-code update-check
 ```
 
 ## Support

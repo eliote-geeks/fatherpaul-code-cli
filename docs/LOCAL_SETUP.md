@@ -85,3 +85,10 @@ fatherpaul-code run "powershell -Command Get-ChildItem" --dry-run --yes
 - WhatsApp: `https://wa.me/237691754257`
 - Email: `pauleliote97@gmail.com`
 - Depannage detaille: `docs/TROUBLESHOOTING.md`
+
+## 9) Mise a jour
+
+```bash
+fatherpaul-code update-check
+npm i -g fatherpaul-code@latest
+```

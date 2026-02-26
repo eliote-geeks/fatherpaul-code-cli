@@ -52,6 +52,8 @@ fatherpaul-code chat
 fatherpaul-code edit src/app.js "Ajoute une gestion d erreurs"
 fatherpaul-code run "npm test"
 fatherpaul-code doctor
+fatherpaul-code update-check
+fatherpaul-code changelog
 fatherpaul-code logout
 ```
 
@@ -80,6 +82,27 @@ Execution protegee:
 ```bash
 fatherpaul-code run "git status"
 fatherpaul-code run "powershell -Command Get-ChildItem" --dry-run --yes
+```
+
+## Mises a jour (utilisateurs)
+
+La CLI fait un check automatique des mises a jour npm (1 fois par jour) et affiche un message si une nouvelle version est disponible.
+
+Commande manuelle:
+
+```bash
+fatherpaul-code update-check
+fatherpaul-code changelog
+```
+
+Note:
+
+- si `update-check` affiche `Package npm non publie`, l application est utilisee en mode installation locale (git + npm i -g .), sans release npm publique.
+
+Mettre a jour:
+
+```bash
+npm i -g fatherpaul-code@latest
 ```
 
 ## Plans et droits (resume)

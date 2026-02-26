@@ -8,6 +8,8 @@ Reference complete des commandes avec exemples copier-coller.
 fatherpaul-code --help
 fatherpaul-code --version
 fatherpaul-code help-quick
+fatherpaul-code update-check
+fatherpaul-code changelog
 ```
 
 ## Workflow recommande
@@ -192,6 +194,30 @@ fatherpaul-code doctor
 
 ---
 
+## `update-check`
+
+Verifier les mises a jour disponibles sur npm.
+
+```bash
+fatherpaul-code update-check
+fatherpaul-code update-check --quiet
+fatherpaul-code update-check --json
+```
+
+Si le package n est pas encore publie sur npm, la commande affiche `Package npm non publie pour le moment`.
+
+---
+
+## `changelog`
+
+Afficher le lien des releases/changelog.
+
+```bash
+fatherpaul-code changelog
+```
+
+---
+
 ## Flux auth technique
 
 1. `POST /api/auth/login`
@@ -223,3 +249,9 @@ fatherpaul-code doctor
 - verifier avec `fatherpaul-code models`
 
 Voir aussi `docs/TROUBLESHOOTING.md`.
+
+## Mise a jour utilisateur
+
+```bash
+npm i -g fatherpaul-code@latest
+```

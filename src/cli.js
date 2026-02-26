@@ -3,6 +3,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { Command } from 'commander';
@@ -10,6 +11,13 @@ import Enquirer from 'enquirer';
 import chalk from 'chalk';
 
 const { prompt } = Enquirer;
+const require = createRequire(import.meta.url);
+const PACKAGE_META = require('../package.json');
+const CLI_PACKAGE_NAME = String(PACKAGE_META?.name || 'fatherpaul-code');
+const CLI_VERSION = String(PACKAGE_META?.version || '0.0.0');
+const CLI_CHANGELOG_URL = 'https://github.com/eliote-geeks/fatherpaul-code-cli/releases';
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const UPDATE_CHECK_TIMEOUT_MS = 2500;
 
 const IS_WINDOWS = process.platform === 'win32';
 const WINDOWS_CONFIG_ROOT = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
@@ -42,7 +50,10 @@ const DEFAULT_CONFIG = {
   defaultModel: 'qwen2.5-7b',
   maxTokens: 512,
   timeoutMs: 90000,
-  allowCommands: getDefaultAllowCommands()
+  allowCommands: getDefaultAllowCommands(),
+  updateCheckEnabled: true,
+  updateCheckLastAt: 0,
+  updateCheckLastLatest: '',
 };
 
 const DANGEROUS_PATTERNS = [
@@ -221,6 +232,111 @@ function isLikelyReadOnly(command) {
     /^cmd\s+\/c\s+(dir|type|echo|where|set)(\s|$)/i,
     /^(powershell|powershell\.exe|pwsh)\s+-Command\s+["']?(Get-ChildItem|Get-Content|Get-Command|Get-Location|Write-Output)\b/i,
   ].some((r) => r.test(c));
+}
+
+function parseVersionParts(version) {
+  const match = String(version || '').trim().match(/^(\d+)\.(\d+)\.(\d+)/);
+  if (!match) return [0, 0, 0];
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function compareVersions(a, b) {
+  const [a1, a2, a3] = parseVersionParts(a);
+  const [b1, b2, b3] = parseVersionParts(b);
+  if (a1 !== b1) return a1 - b1;
+  if (a2 !== b2) return a2 - b2;
+  return a3 - b3;
+}
+
+function shouldRunUpdateCheck(config, force = false) {
+  if (force) return true;
+  if (config.updateCheckEnabled === false) return false;
+  const lastAt = Number(config.updateCheckLastAt || 0);
+  if (!lastAt) return true;
+  return Date.now() - lastAt >= UPDATE_CHECK_INTERVAL_MS;
+}
+
+async function fetchLatestNpmVersion(packageName, timeoutMs = UPDATE_CHECK_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const safeName = encodeURIComponent(String(packageName || '').trim());
+  const url = `https://registry.npmjs.org/${safeName}/latest`;
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`Registry HTTP ${response.status}`);
+    }
+    const data = await response.json();
+    const version = String(data?.version || '').trim();
+    if (!version) {
+      throw new Error('Version npm introuvable');
+    }
+    return version;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function runUpdateCheck(config, options = {}) {
+  const force = Boolean(options.force);
+  const quiet = Boolean(options.quiet);
+  const announce = Boolean(options.announce);
+
+  if (!shouldRunUpdateCheck(config, force)) {
+    return {
+      checked: false,
+      skipped: true,
+      currentVersion: CLI_VERSION,
+      latestVersion: config.updateCheckLastLatest || '',
+      updateAvailable: compareVersions(config.updateCheckLastLatest || '0.0.0', CLI_VERSION) > 0,
+      reason: 'recent',
+    };
+  }
+
+  try {
+    const latestVersion = await fetchLatestNpmVersion(CLI_PACKAGE_NAME);
+    const updateAvailable = compareVersions(latestVersion, CLI_VERSION) > 0;
+
+    const nextConfig = {
+      ...config,
+      updateCheckLastAt: Date.now(),
+      updateCheckLastLatest: latestVersion,
+    };
+    await saveConfig(nextConfig);
+
+    if (announce && updateAvailable && !quiet) {
+      console.log(chalk.yellow(`\nNouvelle version disponible: ${CLI_VERSION} -> ${latestVersion}`));
+      console.log(`Mise a jour: npm i -g ${CLI_PACKAGE_NAME}@latest`);
+      console.log(`Changelog: ${CLI_CHANGELOG_URL}\n`);
+    }
+
+    return {
+      checked: true,
+      skipped: false,
+      currentVersion: CLI_VERSION,
+      latestVersion,
+      updateAvailable,
+      reason: 'checked',
+    };
+  } catch (error) {
+    const message = String(error?.message || error);
+    const notPublished = /\b404\b/.test(message);
+    const nextConfig = {
+      ...config,
+      updateCheckLastAt: Date.now(),
+      updateCheckLastLatest: config.updateCheckLastLatest || '',
+    };
+    await saveConfig(nextConfig);
+    return {
+      checked: false,
+      skipped: true,
+      currentVersion: CLI_VERSION,
+      latestVersion: '',
+      updateAvailable: false,
+      reason: notPublished ? 'not_published' : 'registry_error',
+      error: message,
+    };
+  }
 }
 
 async function askInput(message, initial = '') {
@@ -514,7 +630,7 @@ program.configureOutput({
 program
   .name('fatherpaul-code')
   .description('CLI IA Father Paul Assistant (chat, edition de code, terminal controle)')
-  .version('0.1.0')
+  .version(CLI_VERSION)
   .usage('<command> [options]')
   .addHelpText(
     'after',
@@ -534,6 +650,18 @@ Docs:
   docs/CLI_REFERENCE.md
 `
   );
+
+program.hook('preAction', async (_thisCommand, actionCommand) => {
+  const commandName = String(actionCommand?.name?.() || '').trim();
+  if (!commandName) return;
+  if (commandName === 'update-check') return;
+  const config = await loadConfig();
+  try {
+    await runUpdateCheck(config, { announce: true, quiet: false, force: false });
+  } catch {
+    // Silent by design: update check should never block normal usage.
+  }
+});
 
 program
   .command('init')
@@ -1100,6 +1228,63 @@ Exemple:
   });
 
 program
+  .command('update-check')
+  .description('Verifier si une nouvelle version npm est disponible')
+  .option('--quiet', 'Ne rien afficher si la version est deja a jour')
+  .option('--json', 'Sortie JSON')
+  .addHelpText(
+    'after',
+    `
+Exemples:
+  fatherpaul-code update-check
+  fatherpaul-code update-check --quiet
+  fatherpaul-code update-check --json
+`
+  )
+  .action(async (opts) => {
+    const config = await loadConfig();
+    const result = await runUpdateCheck(config, {
+      force: true,
+      quiet: Boolean(opts.quiet),
+      announce: false,
+    });
+
+    if (opts.json) {
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+
+    if (result.reason === 'not_published') {
+      console.log(chalk.yellow('Package npm non publie pour le moment.'));
+      console.log(`Version locale: ${result.currentVersion}`);
+      console.log(`Changelog: ${CLI_CHANGELOG_URL}`);
+      return;
+    }
+
+    if (result.reason === 'registry_error') {
+      throw new Error(`Impossible de verifier la mise a jour (${result.error || 'registry unavailable'})`);
+    }
+
+    if (!result.updateAvailable) {
+      if (!opts.quiet) {
+        console.log(chalk.green(`CLI a jour: ${result.currentVersion}`));
+      }
+      return;
+    }
+
+    console.log(chalk.yellow(`Nouvelle version disponible: ${result.currentVersion} -> ${result.latestVersion}`));
+    console.log(`Mise a jour: npm i -g ${CLI_PACKAGE_NAME}@latest`);
+    console.log(`Changelog: ${CLI_CHANGELOG_URL}`);
+  });
+
+program
+  .command('changelog')
+  .description('Afficher le lien des releases/changelog')
+  .action(() => {
+    console.log(CLI_CHANGELOG_URL);
+  });
+
+program
   .command('help-quick')
   .description('Aide rapide')
   .action(() => {
@@ -1112,6 +1297,8 @@ program
 + fatherpaul-code chat "Ecris une fonction JS debounce"
 + fatherpaul-code edit src/app.js "Ajoute gestion d erreurs"
 + fatherpaul-code run "npm test"
++ fatherpaul-code update-check
++ fatherpaul-code changelog
 + fatherpaul-code logout
 `);
   });

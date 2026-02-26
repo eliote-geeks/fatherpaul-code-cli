@@ -67,3 +67,4 @@ fatherpaul-code chat "Bonjour, presente-toi en 2 lignes"
 
 - commandes detaillees: `docs/CLI_REFERENCE.md`
 - depannage complet: `docs/TROUBLESHOOTING.md`
+- mises a jour: `fatherpaul-code update-check`
