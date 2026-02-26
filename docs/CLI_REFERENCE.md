@@ -30,7 +30,7 @@ Configurer API base, portal base, cle API (optionnelle), modele par defaut.
 ```bash
 fatherpaul-code init
 fatherpaul-code init --api-base https://ai-api-dev.79.137.32.27.nip.io/v1 --portal-base https://ai-portal-dev.79.137.32.27.nip.io
-fatherpaul-code init --model qwen2.5-7b
+fatherpaul-code init --model free-0xaf
 fatherpaul-code init --api-key sk-xxxx
 ```
 
@@ -121,7 +121,7 @@ Question au modele (one-shot ou interactif).
 ```bash
 fatherpaul-code chat
 fatherpaul-code chat "Explique cette erreur Java"
-fatherpaul-code chat "Propose un plan de test" -m qwen2.5-7b --max-tokens 350
+fatherpaul-code chat "Propose un plan de test" -m starter-3000 --max-tokens 350
 fatherpaul-code chat "Reformule ce mail" -s "Reponds en francais professionnel"
 ```
 
@@ -135,6 +135,7 @@ Important:
 
 - `--register` n est pas une option de `chat`
 - creation compte = `fatherpaul-code register`
+- si le modele par defaut n est pas autorise, la CLI bascule automatiquement vers le premier modele visible.
 
 ---
 

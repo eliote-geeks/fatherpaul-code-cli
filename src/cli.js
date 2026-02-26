@@ -47,7 +47,7 @@ const DEFAULT_CONFIG = {
   accessToken: '',
   authMode: 'apikey',
   userEmail: '',
-  defaultModel: 'qwen2.5-7b',
+  defaultModel: 'free-0xaf',
   maxTokens: 512,
   timeoutMs: 90000,
   allowCommands: getDefaultAllowCommands(),
@@ -275,6 +275,47 @@ async function fetchLatestNpmVersion(packageName, timeoutMs = UPDATE_CHECK_TIMEO
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+function extractModelIds(modelsResponse) {
+  const items = Array.isArray(modelsResponse?.data) ? modelsResponse.data : [];
+  return items
+    .map((item) => String(item?.id || item?.model_name || item?.name || '').trim())
+    .filter(Boolean);
+}
+
+async function getAvailableModelIds(config) {
+  const models = await apiRequest(config, '/models', null, 'GET');
+  return extractModelIds(models);
+}
+
+function isModelAccessDeniedError(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('key_model_access_denied') || message.includes('key not allowed to access model');
+}
+
+async function resolveChatModel(config, requestedModel, explicit = false) {
+  const preferred = String(requestedModel || config.defaultModel || DEFAULT_CONFIG.defaultModel).trim();
+  let available = [];
+  try {
+    available = await getAvailableModelIds(config);
+  } catch {
+    // If /models is unavailable, keep preferred model and let API request fail with explicit error.
+  }
+
+  if (!available.length || explicit) {
+    return { model: preferred, fallback: false, available };
+  }
+  if (available.includes(preferred)) {
+    return { model: preferred, fallback: false, available };
+  }
+
+  return {
+    model: available[0],
+    fallback: true,
+    available,
+    previous: preferred,
+  };
 }
 
 async function runUpdateCheck(config, options = {}) {
@@ -669,14 +710,14 @@ program
   .option('--api-base <url>', 'API base URL, ex: https://ai-api-dev.../v1')
   .option('--portal-base <url>', 'Portal base URL, ex: https://ai-portal-dev...')
   .option('--api-key <key>', 'Cle API client')
-  .option('--model <model>', 'Modele par defaut, ex: qwen2.5-7b')
+  .option('--model <model>', 'Modele par defaut, ex: free-0xaf')
   .addHelpText(
     'after',
     `
 Exemples:
   fatherpaul-code init
   fatherpaul-code init --api-base https://ai-api-dev.79.137.32.27.nip.io/v1 --portal-base https://ai-portal-dev.79.137.32.27.nip.io
-  fatherpaul-code init --model qwen2.5-7b
+  fatherpaul-code init --model free-0xaf
 `
   )
   .action(async (opts) => {
@@ -1011,7 +1052,7 @@ program
 Exemples:
   fatherpaul-code chat
   fatherpaul-code chat "Explique ce code JavaScript"
-  fatherpaul-code chat "Resume ce fichier" -m qwen2.5-7b --max-tokens 350
+  fatherpaul-code chat "Resume ce fichier" -m starter-3000 --max-tokens 350
 
 Important:
   - chat --register n existe pas
@@ -1022,13 +1063,43 @@ Important:
   .action(async (promptArgs, options) => {
     const config = await loadConfig();
     const joined = Array.isArray(promptArgs) ? promptArgs.join(' ').trim() : '';
+    const explicitModel = Boolean(options.model);
+    const resolved = await resolveChatModel(config, options.model || config.defaultModel, explicitModel);
+    const activeModel = resolved.model;
+
+    if (resolved.fallback) {
+      console.log(
+        chalk.yellow(
+          `Modele par defaut inaccessible (${resolved.previous}). Bascule automatique vers: ${activeModel}`
+        )
+      );
+      const nextConfig = { ...config, defaultModel: activeModel };
+      await saveConfig(nextConfig);
+      console.log(chalk.gray(`Modele par defaut mis a jour dans la config: ${activeModel}`));
+    }
+
+    const runChatCall = async (userText, history = []) => {
+      try {
+        return await chatOnce(config, userText, {
+          model: activeModel,
+          system: options.system,
+          maxTokens: options.maxTokens,
+          messages: history,
+        });
+      } catch (error) {
+        if (!isModelAccessDeniedError(error)) {
+          throw error;
+        }
+        const available = resolved.available?.length ? resolved.available : await getAvailableModelIds(config).catch(() => []);
+        const hint = available.length
+          ? `Modeles autorises: ${available.join(', ')}`
+          : 'Modeles autorises: (impossible de recuperer /models)';
+        throw new Error(`${String(error?.message || error)}\n${hint}\nAstuce: fatherpaul-code init --model free-0xaf`);
+      }
+    };
 
     if (joined) {
-      const answer = await chatOnce(config, joined, {
-        model: options.model,
-        system: options.system,
-        maxTokens: options.maxTokens,
-      });
+      const answer = await runChatCall(joined, []);
       console.log(chalk.green('\nAssistant:'));
       console.log(answer);
       return;
@@ -1042,12 +1113,7 @@ Important:
       if (!userText) continue;
       if (userText === '/exit' || userText === '/quit') break;
 
-      const answer = await chatOnce(config, userText, {
-        model: options.model,
-        system: options.system,
-        maxTokens: options.maxTokens,
-        messages: history,
-      });
+      const answer = await runChatCall(userText, history);
 
       history.push({ role: 'user', content: userText });
       history.push({ role: 'assistant', content: answer });
@@ -1215,11 +1281,20 @@ Exemple:
     console.log(`- Modele: ${config.defaultModel}`);
 
     const models = await apiRequest(config, '/models', null, 'GET');
-    const ids = (models?.data || []).map((m) => m.id);
+    const ids = extractModelIds(models);
     console.log(chalk.green(`- Modeles visibles: ${ids.length}`));
 
+    let modelToTest = config.defaultModel;
+    if (ids.length && !ids.includes(config.defaultModel)) {
+      modelToTest = ids[0];
+      console.log(chalk.yellow(`- Modele par defaut non autorise: ${config.defaultModel}`));
+      console.log(chalk.yellow(`- Bascule test vers: ${modelToTest}`));
+      await saveConfig({ ...config, defaultModel: modelToTest });
+      console.log(chalk.gray(`- Config mise a jour: defaultModel=${modelToTest}`));
+    }
+
     const pong = await chatOnce(config, 'Reponds uniquement: OK', {
-      model: config.defaultModel,
+      model: modelToTest,
       maxTokens: 16,
     });
 

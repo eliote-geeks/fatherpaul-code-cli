@@ -33,6 +33,8 @@ Si `login` retourne `Invalid credentials` alors que ton compte web existe:
 fatherpaul-code login --auto-signup
 ```
 
+Si le chat retourne `key_model_access_denied`, la CLI bascule automatiquement vers un modele autorise et met a jour `defaultModel`.
+
 ## Documentation complete
 
 - demarrage: `docs/START_HERE.md`
