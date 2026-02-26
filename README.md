@@ -37,6 +37,7 @@ Prerequis:
 
 - Node.js `>=20`
 - npm
+- Windows, Linux ou macOS
 
 Installation:
 
@@ -48,6 +49,13 @@ Validation:
 
 ```bash
 fatherpaul-code --help
+```
+
+Verification rapide Windows (sans execution reelle):
+
+```bash
+fatherpaul-code run "cmd /c dir" --dry-run --yes
+fatherpaul-code run "powershell -Command Get-ChildItem" --dry-run --yes
 ```
 
 ## Connexion client (parcours recommande)
@@ -107,6 +115,12 @@ Commande shell protegee:
 
 ```bash
 fatherpaul-code run "npm test"
+```
+
+Dry-run (valider la commande sans la lancer):
+
+```bash
+fatherpaul-code run "npm test" --dry-run
 ```
 
 Diagnostic:

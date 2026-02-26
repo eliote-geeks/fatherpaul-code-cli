@@ -11,8 +11,26 @@ import chalk from 'chalk';
 
 const { prompt } = Enquirer;
 
-const CONFIG_DIR = path.join(os.homedir(), '.config', 'fatherpaul-code');
+const IS_WINDOWS = process.platform === 'win32';
+const WINDOWS_CONFIG_ROOT = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
+const CONFIG_DIR = IS_WINDOWS
+  ? path.join(WINDOWS_CONFIG_ROOT, 'fatherpaul-code')
+  : path.join(os.homedir(), '.config', 'fatherpaul-code');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
+
+function getDefaultAllowCommands() {
+  const common = [
+    'ls', 'pwd', 'cat', 'echo', 'rg', 'grep', 'find', 'head', 'tail', 'wc',
+    'git', 'npm', 'node', 'npx', 'pnpm', 'yarn', 'mvn', 'gradle', 'java',
+    'python', 'python3', 'docker', 'kubectl', 'helm', 'sed', 'awk', 'cp',
+    'mv', 'mkdir', 'touch', 'chmod'
+  ];
+  const windows = [
+    'cmd', 'powershell', 'powershell.exe', 'pwsh', 'dir', 'type', 'where',
+    'findstr', 'copy', 'move', 'set'
+  ];
+  return Array.from(new Set([...common, ...windows]));
+}
 
 const DEFAULT_CONFIG = {
   apiBase: 'https://ai-api-dev.79.137.32.27.nip.io/v1',
@@ -24,12 +42,7 @@ const DEFAULT_CONFIG = {
   defaultModel: 'qwen2.5-7b',
   maxTokens: 512,
   timeoutMs: 90000,
-  allowCommands: [
-    'ls', 'pwd', 'cat', 'echo', 'rg', 'grep', 'find', 'head', 'tail', 'wc',
-    'git', 'npm', 'node', 'npx', 'pnpm', 'yarn', 'mvn', 'gradle', 'java',
-    'python', 'python3', 'docker', 'kubectl', 'helm', 'sed', 'awk', 'cp',
-    'mv', 'mkdir', 'touch', 'chmod'
-  ]
+  allowCommands: getDefaultAllowCommands()
 };
 
 const DANGEROUS_PATTERNS = [
@@ -44,7 +57,12 @@ const DANGEROUS_PATTERNS = [
   /(:\(\)\{\s*:\|:\s*&\s*\};:)/,
   /(^|\s)(curl|wget)[^\n|]*\|\s*(sh|bash)/i,
   />\s*\/dev\/(sd|nvme|vd)/i,
-  /(^|\s)chmod\s+-R\s+777\s+\//i
+  /(^|\s)chmod\s+-R\s+777\s+\//i,
+  /(^|\s)(del|erase)\s+\/(s|q)\b/i,
+  /(^|\s)rmdir\s+\/s\s+\/q\b/i,
+  /(^|\s)format\s+[a-z]:/i,
+  /(^|\s)diskpart(\s|$)/i,
+  /(^|\s)bcdedit(\s|$)/i
 ];
 
 function normalizeApiBase(value) {
@@ -77,14 +95,19 @@ async function loadConfig() {
   try {
     const raw = await fs.readFile(CONFIG_FILE, 'utf8');
     const parsed = JSON.parse(raw);
+    const parsedAllow = Array.isArray(parsed.allowCommands) ? parsed.allowCommands : [];
+    const mergedAllow = Array.from(
+      new Set([
+        ...parsedAllow.map((item) => String(item).trim()).filter(Boolean),
+        ...DEFAULT_CONFIG.allowCommands,
+      ])
+    );
     return {
       ...DEFAULT_CONFIG,
       ...parsed,
       apiBase: normalizeApiBase(parsed.apiBase || DEFAULT_CONFIG.apiBase),
       portalBase: normalizePortalBase(parsed.portalBase, parsed.apiBase || DEFAULT_CONFIG.apiBase),
-      allowCommands: Array.isArray(parsed.allowCommands)
-        ? parsed.allowCommands
-        : DEFAULT_CONFIG.allowCommands,
+      allowCommands: mergedAllow.length ? mergedAllow : DEFAULT_CONFIG.allowCommands,
     };
   } catch {
     return { ...DEFAULT_CONFIG };
@@ -170,7 +193,7 @@ function sanitizeEditedFileContent(text) {
 
 function firstToken(command) {
   const parts = command.trim().split(/\s+/);
-  return parts[0] || '';
+  return String(parts[0] || '').toLowerCase();
 }
 
 function isDangerousCommand(command) {
@@ -182,7 +205,7 @@ function isAllowedCommand(command, config) {
   const allow = Array.isArray(config.allowCommands) && config.allowCommands.length
     ? config.allowCommands
     : DEFAULT_CONFIG.allowCommands;
-  return allow.includes(token);
+  return allow.map((item) => String(item).toLowerCase()).includes(token);
 }
 
 function isLikelyReadOnly(command) {
@@ -194,6 +217,9 @@ function isLikelyReadOnly(command) {
     /^docker\s+(ps|images|logs)(\s|$)/,
     /^npm\s+(view|ls|outdated|whoami)(\s|$)/,
     /^node\s+-v$/,
+    /^(dir|type|where|findstr)(\s|$)/i,
+    /^cmd\s+\/c\s+(dir|type|echo|where|set)(\s|$)/i,
+    /^(powershell|powershell\.exe|pwsh)\s+-Command\s+["']?(Get-ChildItem|Get-Content|Get-Command|Get-Location|Write-Output)\b/i,
   ].some((r) => r.test(c));
 }
 
@@ -345,6 +371,68 @@ async function chatOnce(config, userPrompt, options = {}) {
   return text;
 }
 
+function buildFallbackDiff(filePath, oldContent, newContent, maxChanges = 60) {
+  const oldLines = oldContent.replace(/\r/g, '').split('\n');
+  const newLines = newContent.replace(/\r/g, '').split('\n');
+  const max = Math.max(oldLines.length, newLines.length);
+  const lines = [
+    `--- ${filePath} (old)`,
+    `+++ ${filePath} (new)`,
+  ];
+  let changes = 0;
+
+  for (let i = 0; i < max; i += 1) {
+    const hasOld = i < oldLines.length;
+    const hasNew = i < newLines.length;
+    const oldLine = hasOld ? oldLines[i] : '';
+    const newLine = hasNew ? newLines[i] : '';
+    if (hasOld && hasNew && oldLine === newLine) {
+      continue;
+    }
+    lines.push(`@@ line ${i + 1} @@`);
+    if (hasOld) lines.push(`- ${oldLine}`);
+    if (hasNew) lines.push(`+ ${newLine}`);
+    changes += 1;
+    if (changes >= maxChanges) {
+      lines.push('... preview tronque ...');
+      break;
+    }
+  }
+  return lines.join('\n');
+}
+
+async function runNativeDiff(filePath, oldFile, newFile) {
+  return new Promise((resolve) => {
+    const child = spawn(
+      'diff',
+      ['-u', '--label', `${filePath} (old)`, oldFile, '--label', `${filePath} (new)`, newFile],
+      { stdio: ['ignore', 'pipe', 'pipe'] }
+    );
+
+    let stdout = '';
+    let stderr = '';
+    let spawnError = '';
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on('error', (error) => {
+      spawnError = String(error?.message || error);
+    });
+    child.on('close', (code) => {
+      resolve({
+        code: typeof code === 'number' ? code : 2,
+        stdout,
+        stderr,
+        spawnError,
+      });
+    });
+  });
+}
+
 async function printDiffPreview(filePath, oldContent, newContent) {
   const base = path.basename(filePath);
   const oldFile = path.join(tmpdir(), `fatherpaul-old-${Date.now()}-${base}`);
@@ -352,39 +440,36 @@ async function printDiffPreview(filePath, oldContent, newContent) {
 
   await fs.writeFile(oldFile, oldContent, 'utf8');
   await fs.writeFile(newFile, newContent, 'utf8');
+  try {
+    const native = await runNativeDiff(filePath, oldFile, newFile);
+    if (!native.spawnError && native.code <= 1) {
+      if (native.stderr.trim()) {
+        console.log(chalk.yellow(native.stderr.trim()));
+      }
+      if (native.code === 0) {
+        console.log(chalk.gray('Aucun changement detecte.'));
+        return false;
+      }
+      console.log(chalk.cyan('\n--- Apercu des modifications ---'));
+      console.log(native.stdout || chalk.gray('(diff indisponible)'));
+      return true;
+    }
 
-  const child = spawn('diff', ['-u', '--label', `${filePath} (old)`, oldFile, '--label', `${filePath} (new)`, newFile], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-
-  let stdout = '';
-  let stderr = '';
-  child.stdout.on('data', (chunk) => {
-    stdout += chunk.toString();
-  });
-  child.stderr.on('data', (chunk) => {
-    stderr += chunk.toString();
-  });
-
-  const code = await new Promise((resolve) => {
-    child.on('close', resolve);
-  });
-
-  await fs.rm(oldFile, { force: true });
-  await fs.rm(newFile, { force: true });
-
-  if (stderr.trim()) {
-    console.log(chalk.yellow(stderr.trim()));
+    if (native.spawnError || native.stderr.trim()) {
+      const detail = native.spawnError || native.stderr.trim();
+      console.log(chalk.yellow(`Diff natif indisponible, fallback actif (${detail}).`));
+    }
+    if (oldContent === newContent) {
+      console.log(chalk.gray('Aucun changement detecte.'));
+      return false;
+    }
+    console.log(chalk.cyan('\n--- Apercu des modifications (fallback) ---'));
+    console.log(buildFallbackDiff(filePath, oldContent, newContent));
+    return true;
+  } finally {
+    await fs.rm(oldFile, { force: true });
+    await fs.rm(newFile, { force: true });
   }
-
-  if (code === 0) {
-    console.log(chalk.gray('Aucun changement detecte.'));
-    return false;
-  }
-
-  console.log(chalk.cyan('\n--- Apercu des modifications ---'));
-  console.log(stdout || chalk.gray('(diff indisponible)'));
-  return true;
 }
 
 async function runCommand(command, cwd) {
@@ -813,6 +898,7 @@ program
   .description('Executer une commande shell avec garde-fous')
   .option('--cwd <path>', 'Dossier de travail', process.cwd())
   .option('--yes', 'Bypass confirmation')
+  .option('--dry-run', 'Valider sans executer la commande')
   .action(async (commandParts, options) => {
     const config = await loadConfig();
     const command = commandParts.join(' ').trim();
@@ -837,6 +923,13 @@ program
         console.log(chalk.yellow('Execution annulee.'));
         return;
       }
+    }
+
+    if (options.dryRun) {
+      console.log(chalk.green('Validation OK (dry-run).'));
+      console.log(`- Commande: ${command}`);
+      console.log(`- CWD: ${path.resolve(options.cwd)}`);
+      return;
     }
 
     console.log(chalk.cyan(`Execution: ${command}`));
