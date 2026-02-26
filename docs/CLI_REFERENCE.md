@@ -1,70 +1,96 @@
 # CLI Reference - fatherpaul-code
 
-Reference complete des commandes CLI.
+Reference complete des commandes avec exemples copier-coller.
 
-## Global
-
-Afficher l'aide:
+## Aide globale
 
 ```bash
 fatherpaul-code --help
-```
-
-Afficher la version:
-
-```bash
 fatherpaul-code --version
+fatherpaul-code help-quick
 ```
+
+## Workflow recommande
+
+1. `fatherpaul-code login`
+2. `fatherpaul-code whoami`
+3. `fatherpaul-code models`
+4. `fatherpaul-code chat`
+5. `fatherpaul-code edit ...`
+6. `fatherpaul-code run ...`
+
+---
 
 ## `init`
 
-Configurer la CLI (URL API, URL portail, modele, cle API optionnelle).
+Configurer API base, portal base, cle API (optionnelle), modele par defaut.
 
 ```bash
 fatherpaul-code init
-fatherpaul-code init --api-base https://ai-api-dev.79.137.32.27.nip.io/v1 --portal-base https://ai-portal-dev.79.137.32.27.nip.io --model qwen2.5-7b
+fatherpaul-code init --api-base https://ai-api-dev.79.137.32.27.nip.io/v1 --portal-base https://ai-portal-dev.79.137.32.27.nip.io
+fatherpaul-code init --model qwen2.5-7b
 fatherpaul-code init --api-key sk-xxxx
 ```
 
-## `login`
+Quand utiliser `init`:
 
-Authentification utilisateur portail (email/mot de passe), puis recuperation auto de la cle API.
+- premiere config manuelle
+- changement d endpoint
+- usage API key statique (sans session login)
 
-```bash
-fatherpaul-code login
-fatherpaul-code login --email user@example.com --password "Secret123!"
-fatherpaul-code login --portal-base https://ai-portal-dev.79.137.32.27.nip.io
-fatherpaul-code login --auto-signup
-```
-
-Option utile:
-
-- `--auto-signup`: cree automatiquement le compte portail si absent, puis relance le login.
+---
 
 ## `register`
 
-Creer explicitement un compte portail API (utile si vous avez seulement un compte OpenWebUI).
+Creer un compte portail API.
 
 ```bash
 fatherpaul-code register
 fatherpaul-code register --email user@example.com --password "Secret123!" --full-name "User Name"
 ```
 
+Utile si:
+
+- login web OK
+- mais `fatherpaul-code login` retourne `Invalid credentials`
+
+---
+
+## `login`
+
+Authentification portail + verification abonnement + recuperation auto de la cle API.
+
+```bash
+fatherpaul-code login
+fatherpaul-code login --email user@example.com --password "Secret123!"
+fatherpaul-code login --auto-signup
+```
+
+Option:
+
+- `--auto-signup`: cree le compte portail automatiquement si absent
+
+---
+
 ## `whoami`
 
-Afficher la session utilisateur courante.
+Afficher l identite de session et le statut abonnement.
 
 ```bash
 fatherpaul-code whoami
 ```
 
+---
+
 ## `logout`
 
-Supprimer la session locale (token + cle locale).
+Supprimer la session locale.
 
 ```bash
 fatherpaul-code logout
 ```
+
+---
 
 ## `config`
 
@@ -74,117 +100,126 @@ Afficher la configuration active.
 fatherpaul-code config
 ```
 
+---
+
 ## `models`
 
-Lister les modeles accessibles a la cle courante.
+Lister les modeles visibles avec la cle actuelle.
 
 ```bash
 fatherpaul-code models
 ```
 
-## `chat`
+---
 
-Mode one-shot:
+## `chat [prompt...]`
 
-```bash
-fatherpaul-code chat "Ecris des tests unitaires pour cette fonction JS"
-```
-
-Mode interactif:
+Question au modele (one-shot ou interactif).
 
 ```bash
 fatherpaul-code chat
-```
-
-Options:
-
-- `-m, --model <model>`: force le modele
-- `-s, --system <text>`: system prompt
-- `--max-tokens <n>`: taille max de reponse
-
-Exemple:
-
-```bash
-fatherpaul-code chat "Refactor ce code Java" -m qwen2.5-7b --max-tokens 350
-```
-
-## `edit`
-
-Modifier un fichier avec l'IA.
-
-```bash
-fatherpaul-code edit src/service.ts "Ajoute try/catch et logs JSON"
+fatherpaul-code chat "Explique cette erreur Java"
+fatherpaul-code chat "Propose un plan de test" -m qwen2.5-7b --max-tokens 350
+fatherpaul-code chat "Reformule ce mail" -s "Reponds en francais professionnel"
 ```
 
 Options:
 
 - `-m, --model <model>`
-- `--yes` applique sans confirmation
-- `--no-backup` desactive backup `.bak`
+- `-s, --system <text>`
 - `--max-tokens <n>`
 
-## `run`
+Important:
 
-Executer une commande shell avec garde-fous.
+- `--register` n est pas une option de `chat`
+- creation compte = `fatherpaul-code register`
+
+---
+
+## `edit <file> <instruction...>`
+
+Edition assistee avec preview diff.
 
 ```bash
-fatherpaul-code run "npm test"
-fatherpaul-code run "git status"
+fatherpaul-code edit src/app.js "Ajoute gestion d erreurs"
+fatherpaul-code edit src/service.ts "Refactor en fonctions pures" --yes
+fatherpaul-code edit src/main.py "Ajoute logs JSON" --no-backup
 ```
 
-Protection:
+Options:
 
-- patterns dangereux bloques
+- `-m, --model <model>`
+- `--max-tokens <n>`
+- `--yes`
+- `--no-backup`
+
+---
+
+## `run <command...>`
+
+Execution shell avec securite:
+
 - allowlist de commandes
-- confirmation pour commandes non lecture-seule
+- blocage motifs dangereux
+- confirmation si commande non read-only
+
+```bash
+fatherpaul-code run "git status"
+fatherpaul-code run "npm test"
+fatherpaul-code run "cmd /c dir" --dry-run --yes
+fatherpaul-code run "powershell -Command Get-ChildItem" --dry-run --yes
+```
+
+Options:
+
+- `--cwd <path>`
+- `--yes`
+- `--dry-run`
+
+---
 
 ## `doctor`
 
-Diagnostic connectivite API + modele par defaut + auth locale.
+Diagnostic global:
+
+- configuration
+- acces `/models`
+- test chat
 
 ```bash
 fatherpaul-code doctor
 ```
 
-## `help-quick`
+---
 
-Affiche une aide rapide des commandes essentielles.
+## Flux auth technique
 
-```bash
-fatherpaul-code help-quick
-```
+1. `POST /api/auth/login`
+2. `GET /api/me`
+3. `GET /api/subscription/status`
+4. `GET /api/cli/session` (api key + api base)
+5. ecriture config locale
 
-## Flux d'authentification (mode session)
+---
 
-1. `POST /api/auth/login` -> JWT access token
-2. `GET /api/me` -> infos user
-3. `GET /api/subscription/status` -> verif offre active
-4. `GET /api/cli/session` -> `api_key` + `api_base_url`
-5. Enregistrement local dans `~/.config/fatherpaul-code/config.json`
+## Erreurs frequentes
 
-## Codes de retour et erreurs courantes
+`API key manquante`
 
-`401 key_model_access_denied`
+- faire `fatherpaul-code login`
 
-- la formule ne permet pas ce modele
-- utiliser un modele autorise par le plan
+`Invalid credentials`
 
-`403 Active subscription required`
+- faire `fatherpaul-code login --auto-signup`
+- ou `fatherpaul-code register` puis `fatherpaul-code login`
 
-- compte sans abonnement actif
+`Active subscription required`
 
-`409 API key is not provisioned`
+- activer l offre cote serveur puis relancer `login`
 
-- abonnement present mais cle non creee cote backend
+`key_model_access_denied`
 
-`401 Invalid credentials`
+- modele non inclus dans le forfait
+- verifier avec `fatherpaul-code models`
 
-- compte/mot de passe incorrect sur le portal API
-- si le compte existe seulement sur OpenWebUI, faire `fatherpaul-code register`
-- ou utiliser `fatherpaul-code login --auto-signup`
-
-## Bonnes pratiques
-
-- ne pas partager `~/.config/fatherpaul-code/config.json`
-- utiliser `logout` sur machine partagee
-- garder Node.js a jour (>=20)
+Voir aussi `docs/TROUBLESHOOTING.md`.

@@ -1,12 +1,11 @@
-# Installation Locale - Windows / macOS / Linux
+# Installation locale (Windows, macOS, Linux)
 
-Guide d'installation pour clients finaux.
+## 1) Pre-requis
 
-## 1) Prerequis
-
-- Node.js version 20 ou plus recente
+- Node.js >= 20
 - npm installe
-- acces internet vers:
+- compte actif sur la plateforme
+- acces reseau vers:
   - `https://ai-dev.79.137.32.27.nip.io`
   - `https://ai-api-dev.79.137.32.27.nip.io`
   - `https://ai-portal-dev.79.137.32.27.nip.io`
@@ -18,66 +17,71 @@ node -v
 npm -v
 ```
 
-## 2) Installer la CLI
+## 2) Installation
 
 ```bash
 npm i -g fatherpaul-code
-```
-
-Verification:
-
-```bash
+fatherpaul-code --version
 fatherpaul-code --help
 ```
 
-Si la commande n'est pas reconnue:
+## 3) Si la commande n est pas reconnue
 
-- fermer/reouvrir le terminal
-- verifier le PATH npm global
+### Linux/macOS
 
-## 3) Se connecter avec le compte client
+```bash
+npm config get prefix
+echo $PATH
+```
+
+Ajoute le binaire npm global a ton PATH puis reouvre le terminal.
+
+### Windows PowerShell
+
+```powershell
+npm config get prefix
+$env:Path
+```
+
+Ferme/reouvre PowerShell apres install.
+
+## 4) Premiere connexion CLI
 
 ```bash
 fatherpaul-code login
-```
-
-Puis:
-
-```bash
 fatherpaul-code whoami
 ```
 
-## 4) Premiere commande utile
+Si `Invalid credentials`:
 
 ```bash
-fatherpaul-code chat "Ecris une fonction JavaScript qui valide une adresse email"
+fatherpaul-code login --auto-signup
 ```
 
-## 5) Commandes de base
+## 5) Sanity check
 
 ```bash
 fatherpaul-code models
-fatherpaul-code config
+fatherpaul-code chat "Dis bonjour en francais"
 fatherpaul-code doctor
-fatherpaul-code logout
 ```
 
-## 6) Troubleshooting rapide
+## 6) Chemin de configuration locale
 
-`Abonnement non actif`
+- Linux/macOS: `~/.config/fatherpaul-code/config.json`
+- Windows: `%APPDATA%\\fatherpaul-code\\config.json`
 
-- activer le compte d'abord via WhatsApp support
+Ce fichier contient des secrets. Ne pas partager.
 
-`key not allowed to access model`
+## 7) Test Windows CLI (cmd + PowerShell)
 
-- le modele n'est pas dans le forfait
-- faire `fatherpaul-code models` pour voir la liste autorisee
+```bash
+fatherpaul-code run "cmd /c dir" --dry-run --yes
+fatherpaul-code run "powershell -Command Get-ChildItem" --dry-run --yes
+```
 
-`API ... 401` ou `Authentication required`
-
-- relancer `fatherpaul-code login`
-
-## 7) Support
+## 8) Support
 
 - WhatsApp: `https://wa.me/237691754257`
 - Email: `pauleliote97@gmail.com`
+- Depannage detaille: `docs/TROUBLESHOOTING.md`

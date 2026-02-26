@@ -291,7 +291,15 @@ async function apiRequest(config, endpoint, payload, method = 'POST') {
     throw new Error('API base manquante. Lance: fatherpaul-code init');
   }
   if (!config.apiKey) {
-    throw new Error('API key manquante. Lance: fatherpaul-code init ou fatherpaul-code login');
+    throw new Error(
+      [
+        'API key manquante.',
+        'Etapes conseillees:',
+        '- fatherpaul-code login',
+        '- si le compte n existe pas cote portail: fatherpaul-code login --auto-signup',
+        '- sinon: fatherpaul-code register puis fatherpaul-code login',
+      ].join('\n')
+    );
   }
 
   return jsonRequest({
@@ -494,11 +502,38 @@ async function runCommand(command, cwd) {
 }
 
 const program = new Command();
+program.exitOverride();
+program.configureOutput({
+  writeOut: (str) => process.stdout.write(str),
+  writeErr: (str) => {
+    if (str.trimStart().startsWith('error:')) return;
+    process.stderr.write(str);
+  },
+});
 
 program
   .name('fatherpaul-code')
   .description('CLI IA Father Paul Assistant (chat, edition de code, terminal controle)')
-  .version('0.1.0');
+  .version('0.1.0')
+  .usage('<command> [options]')
+  .addHelpText(
+    'after',
+    `
+Quickstart:
+  fatherpaul-code login
+  fatherpaul-code whoami
+  fatherpaul-code models
+  fatherpaul-code chat "Bonjour"
+
+Si tu as un compte web mais login CLI en erreur:
+  fatherpaul-code login --auto-signup
+
+Docs:
+  README.md
+  docs/START_HERE.md
+  docs/CLI_REFERENCE.md
+`
+  );
 
 program
   .command('init')
@@ -507,6 +542,15 @@ program
   .option('--portal-base <url>', 'Portal base URL, ex: https://ai-portal-dev...')
   .option('--api-key <key>', 'Cle API client')
   .option('--model <model>', 'Modele par defaut, ex: qwen2.5-7b')
+  .addHelpText(
+    'after',
+    `
+Exemples:
+  fatherpaul-code init
+  fatherpaul-code init --api-base https://ai-api-dev.79.137.32.27.nip.io/v1 --portal-base https://ai-portal-dev.79.137.32.27.nip.io
+  fatherpaul-code init --model qwen2.5-7b
+`
+  )
   .action(async (opts) => {
     const current = await loadConfig();
 
@@ -550,6 +594,17 @@ program
   .option('-p, --password <password>', 'Mot de passe utilisateur')
   .option('-n, --full-name <name>', 'Nom complet utilisateur')
   .option('--portal-base <url>', 'Portal base URL')
+  .addHelpText(
+    'after',
+    `
+Quand utiliser register:
+  - Tu peux te connecter sur OpenWebUI, mais login CLI retourne "Invalid credentials"
+  - Tu n as pas encore de compte dans le portail API
+
+Exemple:
+  fatherpaul-code register --email user@example.com --password "Secret123!" --full-name "User Name"
+`
+  )
   .action(async (opts) => {
     const current = await loadConfig();
     const portalBase = normalizePortalBase(opts.portalBase || current.portalBase, current.apiBase);
@@ -586,6 +641,19 @@ program
   .option('-p, --password <password>', 'Mot de passe utilisateur')
   .option('--portal-base <url>', 'Portal base URL')
   .option('--auto-signup', 'Creer automatiquement le compte portail si absent')
+  .addHelpText(
+    'after',
+    `
+Exemples:
+  fatherpaul-code login
+  fatherpaul-code login --email user@example.com --password "Secret123!"
+  fatherpaul-code login --auto-signup
+
+Notes:
+  - login verifie abonnement actif
+  - login recupere la cle API automatiquement
+`
+  )
   .action(async (opts) => {
     const current = await loadConfig();
     const portalBase = normalizePortalBase(opts.portalBase || current.portalBase, current.apiBase);
@@ -708,6 +776,13 @@ program
 program
   .command('whoami')
   .description('Afficher l utilisateur connecte et son abonnement')
+  .addHelpText(
+    'after',
+    `
+Exemple:
+  fatherpaul-code whoami
+`
+  )
   .action(async () => {
     const config = await loadConfig();
     if (!config.accessToken) {
@@ -726,6 +801,13 @@ program
 program
   .command('logout')
   .description('Supprimer la session locale CLI')
+  .addHelpText(
+    'after',
+    `
+Exemple:
+  fatherpaul-code logout
+`
+  )
   .action(async () => {
     const current = await loadConfig();
     const next = {
@@ -743,6 +825,13 @@ program
 program
   .command('config')
   .description('Afficher la configuration active')
+  .addHelpText(
+    'after',
+    `
+Exemple:
+  fatherpaul-code config
+`
+  )
   .action(async () => {
     const config = await loadConfig();
     console.log(chalk.cyan('Configuration fatherpaul-code'));
@@ -761,6 +850,13 @@ program
 program
   .command('models')
   .description('Lister les modeles disponibles')
+  .addHelpText(
+    'after',
+    `
+Exemple:
+  fatherpaul-code models
+`
+  )
   .action(async () => {
     const config = await loadConfig();
     const data = await apiRequest(config, '/models', null, 'GET');
@@ -781,6 +877,20 @@ program
   .option('-m, --model <model>', 'Modele')
   .option('-s, --system <text>', 'System prompt')
   .option('--max-tokens <n>', 'Max tokens de reponse', Number)
+  .addHelpText(
+    'after',
+    `
+Exemples:
+  fatherpaul-code chat
+  fatherpaul-code chat "Explique ce code JavaScript"
+  fatherpaul-code chat "Resume ce fichier" -m qwen2.5-7b --max-tokens 350
+
+Important:
+  - chat --register n existe pas
+  - pour creer un compte: fatherpaul-code register
+  - pour se connecter: fatherpaul-code login
+`
+  )
   .action(async (promptArgs, options) => {
     const config = await loadConfig();
     const joined = Array.isArray(promptArgs) ? promptArgs.join(' ').trim() : '';
@@ -831,6 +941,14 @@ program
   .option('--max-tokens <n>', 'Max tokens', Number)
   .option('--yes', 'Appliquer sans confirmation')
   .option('--no-backup', 'Desactiver backup .bak')
+  .addHelpText(
+    'after',
+    `
+Exemples:
+  fatherpaul-code edit src/app.js "Ajoute gestion d erreurs"
+  fatherpaul-code edit src/service.ts "Refactor en fonctions pures" --yes
+`
+  )
   .action(async (file, instructionParts, options) => {
     const config = await loadConfig();
     const instruction = instructionParts.join(' ').trim();
@@ -899,6 +1017,18 @@ program
   .option('--cwd <path>', 'Dossier de travail', process.cwd())
   .option('--yes', 'Bypass confirmation')
   .option('--dry-run', 'Valider sans executer la commande')
+  .addHelpText(
+    'after',
+    `
+Exemples:
+  fatherpaul-code run "npm test"
+  fatherpaul-code run "git status"
+  fatherpaul-code run "powershell -Command Get-ChildItem" --dry-run --yes
+
+Note:
+  Les commandes dangereuses sont bloquees automatiquement.
+`
+  )
   .action(async (commandParts, options) => {
     const config = await loadConfig();
     const command = commandParts.join(' ').trim();
@@ -940,6 +1070,13 @@ program
 program
   .command('doctor')
   .description('Verifier la connectivite API et le modele par defaut')
+  .addHelpText(
+    'after',
+    `
+Exemple:
+  fatherpaul-code doctor
+`
+  )
   .action(async () => {
     const config = await loadConfig();
     console.log(chalk.cyan('Verification de la configuration...'));
@@ -968,6 +1105,7 @@ program
   .action(() => {
     console.log(`
 + fatherpaul-code init
++ fatherpaul-code register
 + fatherpaul-code login
 + fatherpaul-code whoami
 + fatherpaul-code models
@@ -979,7 +1117,27 @@ program
   });
 
 program.parseAsync(process.argv).catch((err) => {
+  if (err?.code === 'commander.helpDisplayed' || err?.code === 'commander.version') {
+    process.exit(0);
+  }
   const message = err?.message || String(err);
-  console.error(chalk.red(`Erreur: ${message}`));
+  const cleanMessage = String(message).replace(/^error:\s*/i, '');
+  const lower = cleanMessage.toLowerCase();
+  const tips = [];
+  if (lower.includes("unknown option '--register'")) {
+    tips.push('Astuce: --register n existe pas sur chat. Utilise: fatherpaul-code register');
+  }
+  if (lower.includes('invalid credentials')) {
+    tips.push('Astuce: fatherpaul-code login --auto-signup');
+  }
+  if (lower.includes('api key manquante')) {
+    tips.push('Astuce: fatherpaul-code login');
+  }
+  if (lower.includes('abonnement non actif')) {
+    tips.push('Astuce: active une offre, puis relance fatherpaul-code login');
+  }
+
+  const suffix = tips.length ? `\n${tips.map((tip) => `- ${tip}`).join('\n')}` : '';
+  console.error(chalk.red(`Erreur: ${cleanMessage}${suffix}`));
   process.exit(1);
 });

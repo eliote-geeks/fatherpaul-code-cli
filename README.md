@@ -1,96 +1,66 @@
 # fatherpaul-code
 
-CLI officiel Father Paul Assistant pour les clients qui veulent utiliser l'IA en local sur leur machine.
+CLI officiel de Father Paul Assistant pour utiliser les modeles IA depuis le terminal (Windows, Linux, macOS).
 
 ## Liens officiels
 
-- Accueil (landing): `https://ai-portal-dev.79.137.32.27.nip.io/`
-- Login utilisateur: `https://ai-dev.79.137.32.27.nip.io/auth`
-- Guide connexion complet: `https://ai-portal-dev.79.137.32.27.nip.io/guide-connexion.html`
+- Landing: `https://ai-portal-dev.79.137.32.27.nip.io/`
+- Connexion web: `https://ai-dev.79.137.32.27.nip.io/auth`
 - API OpenAI-compatible: `https://ai-api-dev.79.137.32.27.nip.io/v1`
 - Support WhatsApp: `https://wa.me/237691754257`
 
-## A qui sert ce CLI
+## Ce que la CLI permet
 
-`fatherpaul-code` permet a un client de:
+- se connecter avec ton compte (session securisee)
+- poser des questions IA en one-shot ou mode interactif
+- editer un fichier avec preview diff avant application
+- executer des commandes shell avec garde-fous
+- respecter automatiquement les droits du forfait
 
-- se connecter avec son compte
-- discuter avec les modeles IA en terminal
-- editer des fichiers avec aide IA
-- executer des commandes controlees
-- utiliser les droits de son forfait automatiquement
-
-## Start Here (client)
-
-1. Lire le guide de depart:
-- `docs/START_HERE.md`
-
-2. Installer localement:
-- `docs/LOCAL_SETUP.md`
-
-3. Voir la reference complete des commandes:
-- `docs/CLI_REFERENCE.md`
-
-## Installation locale
-
-Prerequis:
-
-- Node.js `>=20`
-- npm
-- Windows, Linux ou macOS
-
-Installation:
+## Quickstart (2 minutes)
 
 ```bash
 npm i -g fatherpaul-code
-```
-
-Validation:
-
-```bash
-fatherpaul-code --help
-```
-
-Verification rapide Windows (sans execution reelle):
-
-```bash
-fatherpaul-code run "cmd /c dir" --dry-run --yes
-fatherpaul-code run "powershell -Command Get-ChildItem" --dry-run --yes
-```
-
-## Connexion client (parcours recommande)
-
-Le mode recommande est identique a une experience produit type Claude/Codex:
-
-1. Ouvrir le login: `https://ai-dev.79.137.32.27.nip.io/auth`
-2. Se connecter avec un compte deja active
-3. Dans le terminal local:
-
-```bash
 fatherpaul-code login
 fatherpaul-code whoami
+fatherpaul-code models
+fatherpaul-code chat "Bonjour, presente-toi en 2 lignes"
 ```
 
-Si votre compte existe sur OpenWebUI mais pas encore sur le portal API, creez-le une fois:
+Si `login` retourne `Invalid credentials` alors que ton compte web existe:
 
 ```bash
-fatherpaul-code register
-# ou creation auto au login
 fatherpaul-code login --auto-signup
 ```
 
-Ensuite, la CLI recupere automatiquement:
+## Documentation complete
 
-- la cle API du compte
-- l'URL API
-- les limites liees au forfait
+- demarrage: `docs/START_HERE.md`
+- installation locale: `docs/LOCAL_SETUP.md`
+- reference commandes: `docs/CLI_REFERENCE.md`
+- depannage detaille: `docs/TROUBLESHOOTING.md`
 
-## Usage quotidien
-
-Chat rapide:
+## Commandes essentielles
 
 ```bash
-fatherpaul-code chat "Explique ce code Java"
+fatherpaul-code init
+fatherpaul-code register
+fatherpaul-code login
+fatherpaul-code whoami
+fatherpaul-code models
+fatherpaul-code chat
+fatherpaul-code edit src/app.js "Ajoute une gestion d erreurs"
+fatherpaul-code run "npm test"
+fatherpaul-code doctor
+fatherpaul-code logout
+```
+
+## Exemples rapides
+
+Chat ponctuel:
+
+```bash
+fatherpaul-code chat "Explique ce code JavaScript"
 ```
 
 Chat interactif:
@@ -99,65 +69,33 @@ Chat interactif:
 fatherpaul-code chat
 ```
 
-Lister les modeles autorises sur le compte:
+Edition assistee:
 
 ```bash
-fatherpaul-code models
+fatherpaul-code edit src/service.ts "Refactor en fonctions pures" --yes
 ```
 
-Editer un fichier:
+Execution protegee:
 
 ```bash
-fatherpaul-code edit src/app.ts "Ajoute la gestion d'erreur"
+fatherpaul-code run "git status"
+fatherpaul-code run "powershell -Command Get-ChildItem" --dry-run --yes
 ```
 
-Commande shell protegee:
+## Plans et droits (resume)
 
-```bash
-fatherpaul-code run "npm test"
-```
+- `0 XAF`: decouverte
+- `3 000 XAF`: chat premium + recherche web
+- `10 000 XAF`: premium complet (texte/vision/images/API keys)
+- `7 500 XAF/mois`: formule VS Code/CLI
 
-Dry-run (valider la commande sans la lancer):
+L activation reste cote serveur. En cas de blocage:
 
-```bash
-fatherpaul-code run "npm test" --dry-run
-```
+- WhatsApp: `https://wa.me/237691754257`
 
-Diagnostic:
+## Fichiers locaux crees
 
-```bash
-fatherpaul-code doctor
-```
+- Linux/macOS: `~/.config/fatherpaul-code/config.json`
+- Windows: `%APPDATA%\\fatherpaul-code\\config.json`
 
-## Support des offres
-
-- 0 XAF: acces decouverte
-- 3 000 XAF: premium chat
-- 10 000 XAF: premium + images + API keys
-- 7 500 XAF/mois: formule VS Code
-
-Si un client n'a pas encore de compte actif, passer par WhatsApp support:
-
-- `https://wa.me/237691754257`
-
-## Erreurs frequentes
-
-`Abonnement non actif`
-
-- activer l'offre d'abord via portail/support
-
-`key not allowed to access model`
-
-- modele non autorise pour la formule du compte
-- utiliser `fatherpaul-code models`
-
-`Cle API introuvable via session CLI`
-
-- verifier la session (`fatherpaul-code whoami`)
-- relancer `fatherpaul-code login`
-
-`Invalid credentials` alors que le login web fonctionne
-
-- verifier que le compte existe aussi sur le portal API
-- lancer `fatherpaul-code register`
-- ou utiliser `fatherpaul-code login --auto-signup`
+Ne partage jamais ce fichier (il contient la session et/ou la cle API).

@@ -1,51 +1,69 @@
-# Start Here - Guide Client
+# Start Here - fatherpaul-code
 
-Ce document est le point d'entree officiel pour un client qui veut utiliser Father Paul Assistant en local.
+Point d entree client. Suis ces etapes dans l ordre pour eviter 90% des erreurs.
 
-## Etape 1 - Ouvrir les liens officiels
+## 1) Verifier les pre-requis
 
-- Landing: `https://ai-portal-dev.79.137.32.27.nip.io/`
-- Login: `https://ai-dev.79.137.32.27.nip.io/auth`
-- Guide connexion web: `https://ai-portal-dev.79.137.32.27.nip.io/guide-connexion.html`
-- API Base: `https://ai-api-dev.79.137.32.27.nip.io/v1`
+- machine avec Node.js >= 20
+- compte web fonctionnel sur `https://ai-dev.79.137.32.27.nip.io/auth`
+- offre active cote serveur (free / 3000 / 10000 / vscode)
 
-## Etape 2 - Verifier que le compte est actif
+## 2) Installer la CLI
 
-Avant d'utiliser la CLI:
+```bash
+npm i -g fatherpaul-code
+fatherpaul-code --help
+```
 
-- compte cree et active
-- forfait valide (0 / 3000 / 10000 / VS Code)
+Guide detaille installation:
 
-Si le compte n'est pas actif:
+- `docs/LOCAL_SETUP.md`
 
-- WhatsApp support: `https://wa.me/237691754257`
-
-## Etape 3 - Installer la CLI sur la machine
-
-Suivre: `docs/LOCAL_SETUP.md`
-
-## Etape 4 - Se connecter dans la CLI
+## 3) Login CLI (obligatoire avant chat)
 
 ```bash
 fatherpaul-code login
 fatherpaul-code whoami
 ```
 
-Ce login configure automatiquement:
+Resultat attendu:
 
-- la cle API
-- la base URL API
-- le mode auth session
+- email affiche
+- statut abonnement visible
+- API key masquee visible
 
-## Etape 5 - Premiere utilisation
+## 4) Si login echoue
+
+Cas courant: compte cree sur le web, mais pas dans le portail API.
+
+```bash
+fatherpaul-code login --auto-signup
+```
+
+Alternative explicite:
+
+```bash
+fatherpaul-code register
+fatherpaul-code login
+```
+
+## 5) Premiere commande utile
 
 ```bash
 fatherpaul-code models
-fatherpaul-code chat "Bonjour, presente toi en 2 lignes"
+fatherpaul-code chat "Bonjour, presente-toi en 2 lignes"
 ```
 
-## Etape 6 - Aller plus loin
+## 6) Workflow quotidien conseille
 
-- reference commandes: `docs/CLI_REFERENCE.md`
-- edition de fichier: `fatherpaul-code edit <fichier> "<instruction>"`
-- terminal assiste: `fatherpaul-code run "<commande>"`
+1. `fatherpaul-code whoami`
+2. `fatherpaul-code models`
+3. `fatherpaul-code chat` (mode interactif)
+4. `fatherpaul-code edit ...` pour modifier du code
+5. `fatherpaul-code run ...` en mode securise
+6. `fatherpaul-code logout` sur machine partagee
+
+## 7) Documentation a lire ensuite
+
+- commandes detaillees: `docs/CLI_REFERENCE.md`
+- depannage complet: `docs/TROUBLESHOOTING.md`
